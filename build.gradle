@@ -1,0 +1,267 @@
+apply plugin: 'java'
+
+// Needed even though it looks unused
+sourceCompatibility = 1.8
+
+repositories {
+    mavenCentral()
+}
+
+buildscript {
+    repositories {
+        maven {
+            url "https://plugins.gradle.org/m2/"
+        }
+        mavenCentral()
+    }
+    dependencies {
+        classpath "me.champeau.gradle:jmh-gradle-plugin:0.3.1"
+    }
+}
+
+apply plugin: 'me.champeau.gradle.jmh'
+
+test {
+  reports.junitXml.destination = file('build/reports/tests')
+}
+
+sourceSets {
+    translate {
+        java {
+            compileClasspath += main.output
+        }
+    }
+
+  cli {
+      java {
+          compileClasspath += main.output
+          compileClasspath += translate.output
+      }
+  }
+    api {
+        java {
+            compileClasspath += main.output
+            srcDir 'src/cli/java'
+            exclude 'org/commcare/util/cli/**'
+            exclude 'org/commcare/util/mocks/**'
+        }
+    }
+
+    test {
+        java {
+            compileClasspath += cli.output
+            compileClasspath += api.output
+            compileClasspath += translate.output
+        }
+    }
+
+
+}
+
+dependencies {
+    compile 'kxml2:kxml2:2.3.0'
+    compile 'javax.ws.rs:javax.ws.rs-api:2.0.1'
+    compile group: 'regexp', name: 'regexp', version: '1.3'
+    // Added so Android Studio recognizes libs in util jar projects
+    compile 'org.json:json:20140107'
+    compile 'commons-cli:commons-cli:1.3.1'
+    compile 'xpp3:xpp3:1.1.4c'
+    compile 'joda-time:joda-time:2.9.3'
+    compile 'com.carrotsearch:hppc:0.7.2'
+    compile 'com.squareup.retrofit2:retrofit:2.3.0'
+    compile 'com.squareup.okhttp3:okhttp:3.9.1'
+    compile 'com.google.code.findbugs:jsr305:3.0.2'
+    compile 'io.reactivex.rxjava2:rxjava:2.1.1'
+
+    cliCompile 'org.json:json:20140107'
+    cliCompile group: 'regexp', name: 'regexp', version: '1.3'
+    cliCompile 'kxml2:kxml2:2.3.0'
+    cliCompile 'commons-cli:commons-cli:1.3.1'
+    cliCompile 'xpp3:xpp3:1.1.4c'
+    cliCompile 'joda-time:joda-time:2.9.3'
+    cliCompile 'io.reactivex.rxjava2:rxjava:2.1.1'
+    cliCompile 'com.squareup.retrofit2:retrofit:2.3.0'
+    cliCompile 'com.squareup.okhttp3:okhttp:3.9.1'
+
+    testCompile sourceSets.main.output
+    testCompile sourceSets.api.output
+    testCompile sourceSets.cli.output
+    testCompile sourceSets.translate.output
+    testCompile 'junit:junit:4.12'
+    testCompile 'org.json:json:20140107'
+    testCompile 'org.xerial:sqlite-jdbc:3.16.1'
+    testCompile 'joda-time:joda-time:2.9.3'
+    testCompile 'com.squareup.retrofit2:retrofit:2.3.0'
+    testCompile 'com.squareup.okhttp3:okhttp:3.9.1'
+
+    apiCompile sourceSets.main.output
+    apiCompile 'org.json:json:20140107'
+    apiCompile 'org.xerial:sqlite-jdbc:3.8.11.1'
+    apiCompile 'kxml2:kxml2:2.3.0'
+    apiCompile group: 'regexp', name: 'regexp', version: '1.3'
+    apiCompile 'joda-time:joda-time:2.9.3'
+    apiCompile 'com.carrotsearch:hppc:0.7.2'
+    apiCompile 'io.reactivex.rxjava2:rxjava:2.1.1'
+    apiCompile "com.squareup.retrofit2:retrofit:2.3.0"
+    apiCompile 'com.squareup.okhttp3:okhttp:3.9.1'
+
+    translateCompile 'kxml2:kxml2:2.3.0'
+    translateCompile 'xpp3:xpp3:1.1.4c'
+    translateCompile 'commons-cli:commons-cli:1.3.1'
+    translateCompile group: 'regexp', name: 'regexp', version: '1.3'
+    translateCompile files('lib/json-simple-1.1.1.jar')
+    translateCompile 'joda-time:joda-time:2.9.3'
+    translateCompile 'org.json:json:20140107'
+    translateCompile 'io.reactivex.rxjava2:rxjava:2.1.1'
+    translateCompile "com.squareup.retrofit2:retrofit:2.3.0"
+    translateCompile 'com.squareup.okhttp3:okhttp:3.9.1'
+
+    // 'compile' dependency is also needed to run 'gradle jmh' for some reason,
+    // but leaving it in conflicts with apk builds, so only uncomment the
+    // following lines when jmh needed:
+    /*
+            compile 'org.openjdk.jmh:jmh-core:1.17.3'
+            compile 'org.openjdk.jmh:jmh-generator-annprocess:1.17.3'
+            jmhCompile 'org.openjdk.jmh:jmh-core:1.17.3'
+            jmhCompile 'org.openjdk.jmh:jmh-generator-annprocess:1.17.3'
+            */
+}
+
+jar {
+    baseName = "commcare-libraries"
+}
+
+jar.dependsOn test
+
+configurations {
+  api
+  cliOutput.extendsFrom (cliCompile)
+  harness
+  translate
+  testsAsJar
+}
+
+task cliJar(type: Jar, dependsOn: cliClasses) {
+    baseName = "commcare-cli"
+    from sourceSets.translate.output
+    from sourceSets.cli.output
+    from sourceSets.main.output
+    from {
+        configurations.cliCompile.collect {
+            it.isDirectory() ? it : zipTree(it)
+        }
+        configurations.cliRuntime.collect {
+            it.isDirectory() ? it : zipTree(it)
+        }
+    }
+    manifest {
+        attributes 'Main-Class': 'org.commcare.util.cli.CliMain'
+    }
+
+}
+
+task apiJar(type: Jar, dependsOn: apiClasses) {
+    baseName = "commcare-api"
+    from sourceSets.api.output
+    from sourceSets.main.output
+    from {
+        configurations.apiCompile.collect {
+            it.isDirectory() ? it : zipTree(it)
+        }
+        configurations.apiRuntime.collect {
+            it.isDirectory() ? it : zipTree(it)
+        }
+    }
+}
+
+task harnessJar(type: Jar, dependsOn: translateClasses) {
+    baseName = "javarosa-cli"
+    from sourceSets.translate.output
+    from sourceSets.main.output
+    from {
+        configurations.compile.collect {
+            it.isDirectory() ? it : zipTree(it)
+        }
+        configurations.runtime.collect {
+            it.isDirectory() ? it : zipTree(it)
+        }
+    }
+    manifest {
+        attributes 'Main-Class': 'org.javarosa.engine.Harness'
+    }
+}
+
+// used to provide the test source files to external projects, such as commcare-android,
+// which might want to import classes
+task testsrcJar(type: Jar, dependsOn: testClasses) {
+    classifier = 'tests'
+    from files(sourceSets.test.output)
+    from files(sourceSets.cli.output)
+}
+
+
+task formTranslateJar(type: Jar, dependsOn: translateClasses) {
+    baseName = "form_translate"
+    from sourceSets.translate.output
+    from sourceSets.main.output
+    from {
+        configurations.translateCompile.collect {
+            it.isDirectory() ? it : zipTree(it)
+        }
+        configurations.translateRuntime.collect {
+            it.isDirectory() ? it : zipTree(it)
+        }
+    }
+    manifest {
+        attributes 'Main-Class': 'org.javarosa.xform.schema.Harness'
+    }
+}
+
+artifacts {
+  cliOutput cliJar
+  api apiJar
+  harness harnessJar
+  translate formTranslateJar
+  testsAsJar testsrcJar
+}
+
+task copyTestResources(type: Copy) {
+    from sourceSets.test.resources
+    into "${buildDir}/classes/test"
+}
+processTestResources.dependsOn copyTestResources
+
+def buildDeps = hasProperty('javarosaDeps') ? javarosaDeps : null
+
+/* for use primarily by the build server to extract the required 3rd-party
+libraries into the javarosa source tree. to use this in your own build, set the
+'extract-libs-fresh' property, then also set the 'javarosa-deps' property to
+the path of the library archive (make sure you are using the version of the
+archive compatible with the version you wish to build) */
+task extractLibs(type: Copy) {
+    if (buildDeps != null) {
+        from zipTree(file("${buildDeps}")) into file("${projectDir}")
+    }
+}
+
+compileJava.dependsOn extractLibs
+
+
+task jenkinsTest {
+    inputs.files test.outputs.files
+    doLast {
+        def timestamp = System.currentTimeMillis()
+        test.getReports().getJunitXml().getDestination().eachFile { it.lastModified = timestamp }
+    }
+}
+
+check.dependsOn(jenkinsTest)
+
+jmh {
+    duplicateClassesStrategy = 'warn'
+    fork = 2
+    iterations = 10
+    warmupIterations = 20
+    includeTests = true
+    // default mode is 'throughput'; where a larger score is better
+}
